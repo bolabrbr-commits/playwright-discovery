@@ -23,3 +23,5 @@ with sync_playwright() as p:
         print(v.inner_text())
 
     browser.close()
+import time
+time.sleep(999999)
