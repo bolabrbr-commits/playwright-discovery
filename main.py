@@ -1,23 +1,27 @@
 from playwright.sync_api import sync_playwright
-import json
+import requests
 from datetime import datetime
 
+# ================= CONFIG =================
 KEYWORD = "storytime"
 MAX_RESULTS = 20
 COUNTRY = "US"
+
+WEBHOOK_URL = "https://n8n-n8n.rcjzpn.easypanel.host/webhook/shorts-discovery"
+# ==========================================
 
 def score_video(title, published):
     score = 0
 
     if title:
-        title_l = title.lower()
-        if any(w in title_l for w in ["story", "storytime", "true", "real"]):
+        t = title.lower()
+        if any(w in t for w in ["story", "storytime", "true", "real"]):
             score += 3
         if len(title) < 70:
             score += 1
 
     if published:
-        if "hour" in published or "minute" in published:
+        if "minute" in published or "hour" in published:
             score += 3
         elif "day" in published:
             score += 1
@@ -25,7 +29,7 @@ def score_video(title, published):
     return score
 
 
-raw_output = {
+payload = {
     "keyword": KEYWORD,
     "country": COUNTRY,
     "collected_at": datetime.utcnow().isoformat(),
@@ -73,14 +77,12 @@ with sync_playwright() as p:
             channel = channel_el.inner_text().strip() if channel_el else None
             published = time_el.inner_text().strip() if time_el else None
 
-            score = score_video(title, published)
-
-            raw_output["videos"].append({
+            payload["videos"].append({
                 "title": title,
                 "url": url,
                 "channel": channel,
                 "published": published,
-                "score": score
+                "score": score_video(title, published)
             })
 
         except:
@@ -88,16 +90,7 @@ with sync_playwright() as p:
 
     browser.close()
 
-# salvar bruto
-with open("shorts_discovery_raw.json", "w", encoding="utf-8") as f:
-    json.dump(raw_output, f, ensure_ascii=False, indent=2)
-
-# ordenar por score
-ranked = sorted(raw_output["videos"], key=lambda x: x["score"], reverse=True)
-
-with open("shorts_ranked.json", "w", encoding="utf-8") as f:
-    json.dump(ranked, f, ensure_ascii=False, indent=2)
-
-print("Discovery finished.")
-print("Total videos:", len(raw_output["videos"]))
-print("Top score:", ranked[0]["score"] if ranked else "none")
+# ======= SEND TO N8N =======
+response = requests.post(WEBHOOK_URL, json=payload, timeout=15)
+print("Webhook status:", response.status_code)
+print("Videos sent:", len(payload["videos"]))
