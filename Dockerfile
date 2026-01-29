@@ -1,6 +1,4 @@
-FROM mcr.microsoft.com/playwright/python:v1.42.0-jammy
-
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+FROM mcr.microsoft.com/playwright/python:v1.57.0-jammy
 
 WORKDIR /app
 
