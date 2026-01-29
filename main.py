@@ -1,8 +1,8 @@
 from playwright.sync_api import sync_playwright
+import json
+import time
 import requests
 from datetime import datetime
-import time
-import json
 
 # ================= CONFIG =================
 KEYWORD = "storytime"
@@ -60,22 +60,19 @@ with sync_playwright() as p:
                 "channel": channel_el.inner_text().strip() if channel_el else None,
                 "published": time_el.inner_text().strip() if time_el else None
             })
-
-        except Exception as e:
+        except:
             continue
 
     browser.close()
 
-# ================= SEND TO N8N =================
+# ========= ENVIO PARA N8N =========
 try:
-    response = requests.post(
+    res = requests.post(
         WEBHOOK_URL,
         json=output,
-        timeout=30
+        timeout=15
     )
-
-    print("Webhook status:", response.status_code)
+    print("Webhook status:", res.status_code)
     print("Videos sent:", len(output["videos"]))
-
 except Exception as e:
     print("Webhook error:", str(e))
