@@ -1,12 +1,15 @@
 from playwright.sync_api import sync_playwright
 import requests
 from datetime import datetime
+import time
 
+# ================= CONFIG =================
 KEYWORD = "storytime"
-MAX_RESULTS = 15
+MAX_RESULTS = 20
 COUNTRY = "US"
 
 WEBHOOK_URL = "https://n8n-n8n.rcjzpn.easypanel.host/webhook/shorts-discovery"
+# =========================================
 
 output = {
     "keyword": KEYWORD,
@@ -26,27 +29,58 @@ with sync_playwright() as p:
         ]
     )
 
-    page = browser.new_page()
-    page.goto(
-        f"https://www.youtube.com/results?search_query={KEYWORD}&sp=CAISAhAB",
-        timeout=60000
+    context = browser.new_context(
+        locale="en-US",
+        timezone_id="America/New_York",
+        extra_http_headers={
+            "Accept-Language": "en-US,en;q=0.9"
+        }
     )
+
+    page = context.new_page()
+
+    search_url = f"https://www.youtube.com/results?search_query={KEYWORD}&sp=EgIYAw%253D%253D"
+    page.goto(search_url, timeout=60000)
+
+    # tempo para carregar shorts
     page.wait_for_timeout(5000)
 
-    videos = page.query_selector_all("ytd-video-renderer")
+    # pega SOMENTE shorts
+    shorts = page.query_selector_all("ytd-reel-item-renderer")
 
-    for video in videos[:MAX_RESULTS]:
-        title_el = video.query_selector("#video-title")
-        if not title_el:
+    for short in shorts:
+        if len(output["videos"]) >= MAX_RESULTS:
+            break
+
+        try:
+            title_el = short.query_selector("#video-title")
+            link_el = short.query_selector("a")
+
+            if not title_el or not link_el:
+                continue
+
+            href = link_el.get_attribute("href")
+
+            # valida que é shorts
+            if not href or "/shorts/" not in href:
+                continue
+
+            output["videos"].append({
+                "title": title_el.inner_text().strip(),
+                "url": "https://www.youtube.com" + href
+            })
+
+        except:
             continue
-
-        output["videos"].append({
-            "title": title_el.inner_text().strip(),
-            "url": "https://www.youtube.com" + title_el.get_attribute("href"),
-        })
 
     browser.close()
 
-res = requests.post(WEBHOOK_URL, json=output, timeout=20)
+# ========= ENVIO PARA N8N =========
+res = requests.post(
+    WEBHOOK_URL,
+    json=output,
+    timeout=20
+)
+
 print("Webhook status:", res.status_code)
-print("Videos sent:", len(output["videos"]))
+print("Shorts sent:", len(output["videos"]))
