@@ -4,7 +4,7 @@ from datetime import datetime
 import time
 
 # ================= CONFIG =================
-KEYWORD = "storytime" # Obs: Ignorado nesta url, servirá apenas de etiqueta no JSON
+HASHTAG = "didyouknow"   # sem #
 MAX_RESULTS = 20
 COUNTRY = "US"
 
@@ -12,7 +12,7 @@ WEBHOOK_URL = "https://n8n-n8n.rcjzpn.easypanel.host/webhook/shorts-discovery"
 # =========================================
 
 output = {
-    "keyword": KEYWORD,
+    "keyword": HASHTAG,
     "country": COUNTRY,
     "collected_at": datetime.utcnow().isoformat(),
     "videos": []
@@ -39,57 +39,35 @@ with sync_playwright() as p:
 
     page = context.new_page()
 
-    # URL Trocada conforme solicitado (Feed direto de Shorts)
-    page.goto("https://www.youtube.com/shorts", timeout=60000)
-    page.wait_for_timeout(3000)
+    hashtag_url = f"https://www.tiktok.com/tag/{HASHTAG}"
+    page.goto(hashtag_url, timeout=60000)
+    page.wait_for_timeout(4000)
 
-    # Força scroll para carregar Shorts
+    # scroll humano leve
     for _ in range(6):
         page.mouse.wheel(0, 1200)
         page.wait_for_timeout(1200)
 
-    # ================= SOLUÇÃO HÍBRIDA =================
-    # 1. Tenta pegar pelo container oficial (mais rico em dados)
-    shorts = page.query_selector_all("ytd-reel-item-renderer")
-    
-    # 2. Se falhar (retornar vazio), ativa o fallback para links brutos
-    if not shorts:
-        print("⚠️ Container padrão não encontrado. Ativando fallback para links...")
-        shorts = page.query_selector_all("a[href*='/shorts/']")
-    # ===================================================
+    # links de vídeos
+    video_links = page.query_selector_all("a[href*='/video/']")
 
-    for el in shorts:
+    for link in video_links:
         if len(output["videos"]) >= MAX_RESULTS:
             break
 
         try:
-            # Lógica Híbrida: Verifica se é um Link (Fallback) ou Container (Renderer)
-            if el.get_attribute("href"):
-                # É o caso do fallback (elemento <a>)
-                href = el.get_attribute("href")
-                title = el.inner_text() # Tenta pegar texto do link
-                if not title: 
-                    title = "Short sem título"
-            else:
-                # É o caso do renderer (elemento <ytd-reel...>)
-                title_el = el.query_selector("#video-title")
-                link_el = el.query_selector("a")
+            href = link.get_attribute("href")
+            text = link.inner_text()
 
-                if not title_el or not link_el:
-                    continue
-
-                href = link_el.get_attribute("href")
-                title = title_el.inner_text()
-
-            if not href or "/shorts/" not in href:
+            if not href:
                 continue
 
             output["videos"].append({
-                "title": title.strip(),
-                "url": "https://www.youtube.com" + href
+                "title": text.strip() if text else "TikTok Curiosity",
+                "url": href
             })
 
-        except Exception as e:
+        except:
             continue
 
     browser.close()
@@ -107,4 +85,4 @@ try:
 except Exception as e:
     print(f"Erro ao enviar webhook: {e}")
 
-print("Shorts sent:", len(output["videos"]))
+print("Videos sent:", len(output["videos"]))
