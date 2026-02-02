@@ -4,9 +4,10 @@ from datetime import datetime
 import time
 
 # ================= CONFIG =================
-KEYWORD = "storytime"
-MAX_RESULTS = 20
-COUNTRY = "US"
+KEYWORD = "storytime"        # nicho principal
+MAX_RESULTS = 20             # limite por execução
+COUNTRY = "US"               # etiqueta (não força geo real)
+SCROLL_TIMES = 8             # controla volume / risco
 
 WEBHOOK_URL = "https://n8n-n8n.rcjzpn.easypanel.host/webhook/shorts-discovery"
 # =========================================
@@ -29,13 +30,7 @@ with sync_playwright() as p:
         ]
     )
 
-    # ✅ 1️⃣ ADICIONAR USER-AGENT REAL (Conforme solicitado)
     context = browser.new_context(
-        user_agent=(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/121.0.0.0 Safari/537.36"
-        ),
         locale="en-US",
         timezone_id="America/New_York",
         extra_http_headers={
@@ -45,34 +40,36 @@ with sync_playwright() as p:
 
     page = context.new_page()
 
-    # Ajustei a URL para o TikTok, já que os seletores são de lá
-    search_url = f"https://www.tiktok.com/search?q={KEYWORD}"
-    page.goto(search_url, timeout=60000)
-    page.wait_for_timeout(3000)
+    # ===== FEED DIRETO DE SHORTS (mais estável que search) =====
+    page.goto("https://www.youtube.com/shorts", timeout=60000)
+    page.wait_for_timeout(4000)
 
-    # Força scroll para carregar vídeos
-    for _ in range(6):
-        page.mouse.wheel(0, 1200)
+    # Scroll humano leve (baixo risco)
+    for _ in range(SCROLL_TIMES):
+        page.mouse.wheel(0, 1500)
         page.wait_for_timeout(1200)
 
-    # ✅ 2️⃣ TROCAR O SELECTOR DE LINKS (Lógica robusta do TikTok)
-    video_links = page.query_selector_all("a[href^='https://www.tiktok.com/']")
-    
-    for link in video_links:
+    # Coleta links de Shorts
+    links = page.query_selector_all("a[href^='/shorts/']")
+
+    for link in links:
         if len(output["videos"]) >= MAX_RESULTS:
             break
 
         try:
             href = link.get_attribute("href")
-            text = link.inner_text()
+            title = link.inner_text()
 
-            # Valida se é realmente um vídeo
-            if not href or "/video/" not in href:
+            if not href:
+                continue
+
+            # Nichagem simples (rápida e eficiente)
+            if title and KEYWORD.lower() not in title.lower():
                 continue
 
             output["videos"].append({
-                "title": text.strip() if text else "TikTok Curiosity",
-                "url": href
+                "title": title.strip() if title else "YouTube Short",
+                "url": "https://www.youtube.com" + href
             })
 
         except:
@@ -93,4 +90,4 @@ try:
 except Exception as e:
     print(f"Erro ao enviar webhook: {e}")
 
-print("Videos sent:", len(output["videos"]))
+print("Shorts sent:", len(output["videos"]))
