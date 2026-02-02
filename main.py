@@ -63,9 +63,6 @@ with sync_playwright() as p:
             if not href:
                 continue
 
-            # Nichagem simples (rápida e eficiente)
-            if title and KEYWORD.lower() not in title.lower():
-                continue
 
             output["videos"].append({
                 "title": title.strip() if title else "YouTube Short",
