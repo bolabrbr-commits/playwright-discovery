@@ -41,15 +41,15 @@ with sync_playwright() as p:
 
     search_url = f"https://www.youtube.com/results?search_query={KEYWORD}&sp=EgIYAw%253D%253D"
     page.goto(search_url, timeout=60000)
-page.wait_for_timeout(3000)
+    page.wait_for_timeout(3000)
 
-# força scroll para carregar Shorts
-for _ in range(6):
-    page.mouse.wheel(0, 1200)
-    page.wait_for_timeout(1200)
+    # força scroll para carregar Shorts
+    for _ in range(6):
+        page.mouse.wheel(0, 1200)
+        page.wait_for_timeout(1200)
 
-# agora sim, Shorts aparecem
-shorts = page.query_selector_all("ytd-reel-item-renderer")
+    # agora sim, Shorts aparecem
+    shorts = page.query_selector_all("ytd-reel-item-renderer")
 
     for short in shorts:
         if len(output["videos"]) >= MAX_RESULTS:
