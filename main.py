@@ -4,7 +4,7 @@ from datetime import datetime
 import time
 
 # ================= CONFIG =================
-KEYWORD = "storytime"
+KEYWORD = "storytime" # Obs: Ignorado nesta url, servirá apenas de etiqueta no JSON
 MAX_RESULTS = 20
 COUNTRY = "US"
 
@@ -39,9 +39,8 @@ with sync_playwright() as p:
 
     page = context.new_page()
 
-    # URL com filtro de Shorts forçado (sp=EgIYAw%253D%253D)
-    search_url = f"https://www.youtube.com/results?search_query={KEYWORD}&sp=EgIYAw%253D%253D"
-    page.goto(search_url, timeout=60000)
+    # URL Trocada conforme solicitado (Feed direto de Shorts)
+    page.goto("https://www.youtube.com/shorts", timeout=60000)
     page.wait_for_timeout(3000)
 
     # Força scroll para carregar Shorts
@@ -69,7 +68,7 @@ with sync_playwright() as p:
                 # É o caso do fallback (elemento <a>)
                 href = el.get_attribute("href")
                 title = el.inner_text() # Tenta pegar texto do link
-                if not title: # Se vier vazio, tenta título acessível ou ignora
+                if not title: 
                     title = "Short sem título"
             else:
                 # É o caso do renderer (elemento <ytd-reel...>)
@@ -82,7 +81,6 @@ with sync_playwright() as p:
                 href = link_el.get_attribute("href")
                 title = title_el.inner_text()
 
-            # Validação final de segurança
             if not href or "/shorts/" not in href:
                 continue
 
@@ -92,7 +90,6 @@ with sync_playwright() as p:
             })
 
         except Exception as e:
-            # print(f"Erro ao processar item: {e}") 
             continue
 
     browser.close()
