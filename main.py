@@ -4,7 +4,7 @@ from datetime import datetime
 import time
 
 # ================= CONFIG =================
-HASHTAG = "didyouknow"   # sem #
+KEYWORD = "storytime"
 MAX_RESULTS = 20
 COUNTRY = "US"
 
@@ -12,7 +12,7 @@ WEBHOOK_URL = "https://n8n-n8n.rcjzpn.easypanel.host/webhook/shorts-discovery"
 # =========================================
 
 output = {
-    "keyword": HASHTAG,
+    "keyword": KEYWORD,
     "country": COUNTRY,
     "collected_at": datetime.utcnow().isoformat(),
     "videos": []
@@ -29,7 +29,13 @@ with sync_playwright() as p:
         ]
     )
 
+    # ✅ 1️⃣ ADICIONAR USER-AGENT REAL (Conforme solicitado)
     context = browser.new_context(
+        user_agent=(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/121.0.0.0 Safari/537.36"
+        ),
         locale="en-US",
         timezone_id="America/New_York",
         extra_http_headers={
@@ -39,18 +45,19 @@ with sync_playwright() as p:
 
     page = context.new_page()
 
-    hashtag_url = f"https://www.tiktok.com/tag/{HASHTAG}"
-    page.goto(hashtag_url, timeout=60000)
-    page.wait_for_timeout(4000)
+    # Ajustei a URL para o TikTok, já que os seletores são de lá
+    search_url = f"https://www.tiktok.com/search?q={KEYWORD}"
+    page.goto(search_url, timeout=60000)
+    page.wait_for_timeout(3000)
 
-    # scroll humano leve
+    # Força scroll para carregar vídeos
     for _ in range(6):
         page.mouse.wheel(0, 1200)
         page.wait_for_timeout(1200)
 
-    # links de vídeos
-    video_links = page.query_selector_all("a[href*='/video/']")
-
+    # ✅ 2️⃣ TROCAR O SELECTOR DE LINKS (Lógica robusta do TikTok)
+    video_links = page.query_selector_all("a[href^='https://www.tiktok.com/']")
+    
     for link in video_links:
         if len(output["videos"]) >= MAX_RESULTS:
             break
@@ -59,7 +66,8 @@ with sync_playwright() as p:
             href = link.get_attribute("href")
             text = link.inner_text()
 
-            if not href:
+            # Valida se é realmente um vídeo
+            if not href or "/video/" not in href:
                 continue
 
             output["videos"].append({
