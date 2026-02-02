@@ -63,7 +63,6 @@ with sync_playwright() as p:
             if not href:
                 continue
 
-
             output["videos"].append({
                 "title": title.strip() if title else "YouTube Short",
                 "url": "https://www.youtube.com" + href
