@@ -1,89 +1,81 @@
-from playwright.sync_api import sync_playwright
+import base64
 import requests
-from datetime import datetime
-import time
+from fastapi import FastAPI
+from pydantic import BaseModel
+from playwright.sync_api import sync_playwright
 
-# ================= CONFIG =================
-KEYWORD = "storytime"        # nicho principal
-MAX_RESULTS = 20             # limite por execução
-COUNTRY = "US"               # etiqueta (não força geo real)
-SCROLL_TIMES = 8             # controla volume / risco
+app = FastAPI()
 
-WEBHOOK_URL = "https://n8n-n8n.rcjzpn.easypanel.host/webhook/shorts-discovery"
-# =========================================
+GEMINI_URL = "https://gemini.google.com/app"
 
-output = {
-    "keyword": KEYWORD,
-    "country": COUNTRY,
-    "collected_at": datetime.utcnow().isoformat(),
-    "videos": []
-}
 
-with sync_playwright() as p:
-    browser = p.chromium.launch(
-        headless=True,
-        args=[
-            "--no-sandbox",
-            "--disable-setuid-sandbox",
-            "--disable-dev-shm-usage",
-            "--disable-gpu",
-        ]
-    )
+class ImageRequest(BaseModel):
+    scene_prompt: str
+    character_image_url: str
 
-    context = browser.new_context(
-        locale="en-US",
-        timezone_id="America/New_York",
-        extra_http_headers={
-            "Accept-Language": "en-US,en;q=0.9"
+
+def download_image(url, path):
+    r = requests.get(url)
+    r.raise_for_status()
+    with open(path, "wb") as f:
+        f.write(r.content)
+
+
+def image_to_base64(path):
+    with open(path, "rb") as f:
+        return base64.b64encode(f.read()).decode("utf-8")
+
+
+@app.post("/generate-image")
+def generate_image(data: ImageRequest):
+    with sync_playwright() as p:
+        browser = p.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage"]
+        )
+        page = browser.new_page()
+
+        page.goto(GEMINI_URL, timeout=60000)
+        page.wait_for_timeout(5000)
+
+        character_path = "/tmp/character.png"
+        output_path = "/tmp/output.png"
+
+        download_image(data.character_image_url, character_path)
+
+        page.locator("input[type=file]").set_input_files(character_path)
+        page.wait_for_timeout(3000)
+
+        textarea = page.locator("textarea")
+        textarea.fill(f"""
+Use the uploaded image as the SAME CHARACTER reference.
+
+Create a cinematic, ultra realistic image.
+
+Scene:
+{data.scene_prompt}
+
+Rules:
+- same character
+- same face
+- no text
+- no logos
+- 16:9
+""")
+        textarea.press("Enter")
+
+        page.wait_for_timeout(15000)
+
+        page.locator("img").first.screenshot(path=output_path)
+
+        browser.close()
+
+        return {
+            "status": "ok",
+            "image_base64": image_to_base64(output_path)
         }
-    )
 
-    page = context.new_page()
 
-    # ===== FEED DIRETO DE SHORTS (mais estável que search) =====
-    page.goto("https://www.youtube.com/shorts", timeout=60000)
-    page.wait_for_timeout(4000)
-
-    # Scroll humano leve (baixo risco)
-    for _ in range(SCROLL_TIMES):
-        page.mouse.wheel(0, 1500)
-        page.wait_for_timeout(1200)
-
-    # Coleta links de Shorts
-    links = page.query_selector_all("a[href^='/shorts/']")
-
-    for link in links:
-        if len(output["videos"]) >= MAX_RESULTS:
-            break
-
-        try:
-            href = link.get_attribute("href")
-            title = link.inner_text()
-
-            if not href:
-                continue
-
-            output["videos"].append({
-                "title": title.strip() if title else "YouTube Short",
-                "url": "https://www.youtube.com" + href
-            })
-
-        except:
-            continue
-
-    browser.close()
-
-# ========= ENVIO PARA N8N =========
-print(f"Enviando {len(output['videos'])} vídeos para o Webhook...")
-
-try:
-    res = requests.post(
-        WEBHOOK_URL,
-        json=output,
-        timeout=20
-    )
-    print("Webhook status:", res.status_code)
-except Exception as e:
-    print(f"Erro ao enviar webhook: {e}")
-
-print("Shorts sent:", len(output["videos"]))
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
